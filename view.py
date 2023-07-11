@@ -6,10 +6,12 @@ from GUI.solver_ui import Ui_Solver
 from GUI.play_ui import Ui_Play
 import cv2
 import numpy
-from keras.models import load_model
 import imutils
 import random
-from solver import *
+import tensorflow as tf
+from keras.models import load_model, Model
+
+
 
 class Menu(QDialog, Ui_Menu):
     def __init__(self, parent=None):
@@ -53,16 +55,33 @@ class Play(QDialog, Ui_Play):
         #                 square.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         #                 square.verticalHeader().setSectionResizeMode(QHeaderView.Stretch)
         #         square.clearSelection()
-        puzzle = [[0] * 9 for _ in range(9)]
+        
 
         # Find sudoku image in the directory
-        sudoku_img = cv2.imread('sudoku1.jpg')
+        sudoku_img = cv2.imread('sudoku.jpg')
         board, position = self.find_board(sudoku_img)
         # cv2.imshow("Board", board)
         gray_out = cv2.cvtColor(board, cv2.COLOR_BGR2GRAY)
         rois = self.split_board(gray_out)
         rois = numpy.array(rois).reshape(-1,48,48,1)
-    
+
+        puzzle = self.predict_digit(rois)
+
+        for r, row in enumerate(self.squares):
+            for c, square in enumerate(row):
+                for i in range(3):
+                    for j in range(3):
+                        val = puzzle[i + r * 3][j + c * 3]
+                        if val != 0:
+                            item = QTableWidgetItem(str(val))
+                            item.setFlags(Qt.ItemIsSelectable or Qt.ItemIsEnabled)
+                        else:
+                            item = QTableWidgetItem("")
+                        square.setItem(i, j, item)
+                        square.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+                        square.verticalHeader().setSectionResizeMode(QHeaderView.Stretch)
+                square.clearSelection()
+                
     # Input image and locate sudoku board on the image
     def find_board(self, sudoku_img):
         # Convert img to gray color
@@ -122,12 +141,32 @@ class Play(QDialog, Ui_Play):
             columns = numpy.hsplit(r, 9)
             for c in columns:
                 c = cv2.resize(c, (48, 48))/255.0
-                cv2.imshow("Splitted block", c)
-                cv2.waitKey(50)
+                # cv2.imshow("Splitted block", c)
+                # cv2.waitKey(50)
                 square_list.append(c)
         #cv2.destroyAllWindows()
         return square_list
     
+    def predict_digit(self, rois):
+        
+        model = load_model('model-OCR.h5')
+        prediction = model.predict(rois) # type: ignore
+        # print(prediction)
+        predicted_numbers = []
+        # get classes from prediction
+        classes = numpy.arange(0, 10)
+        for i in prediction: 
+            index = (numpy.argmax(i)) # returns the index of the maximum number of the array
+            predicted_number = classes[index]
+            predicted_numbers.append(predicted_number)
+        print(type(predicted_numbers))
+        board = numpy.array(predicted_numbers).reshape(9,9).tolist()
+        return board
+
+
+
+# print(predicted_numbers)
+
     def genPuzzle(self):
         '''Generates a valid sudoku board with random num of hints btwn 17 and 27'''
         board = [[0] * 9 for _ in range(9)]
